@@ -12,7 +12,7 @@
 #include <math.h>
 #include <string.h>
 
-#define HTTP302 "HTTP/1.1 302 Found\r\n" "Connection: close\r\n" "Content-Length: 0\r\n" "Location: http://240.0.192.1/?%s%s\r\n"
+#define HTTP302 "HTTP/1.1 302 Found\r\n" "Connection: close\r\n" "Content-Length: 0\r\n" "Location: http://203.0.113.254/?%s%s\r\n"
 
 #ifdef DEBUG
 void print_packet(const u_char *packet);
