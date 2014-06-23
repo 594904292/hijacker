@@ -57,7 +57,14 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
     get_pos = _get - payload;
     memcpy(http_get, payload+4, get_pos-13);
 
-    _host = strcasestr(payload+get_pos, "host")+6;
+    if(strstr(http_get, ".js") == NULL) {
+#ifdef DEBUG
+        fprintf(stderr, "URI not .js, pass\n");
+#endif
+        return;
+    }
+
+    _host = strcasestr(payload+get_pos, "host:")+6;
     memcpy(http_host, _host, (strstr(_host, "\r\n") - _host));
 
 #ifdef DEBUG
