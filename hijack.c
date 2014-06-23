@@ -59,19 +59,26 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
 
     size_t urllen = strlen(http_get);
     char *suffix = http_get + urllen - 3;
+
+    // ends with '.js'
     if(!(*suffix == '.' && *(suffix+1) == 'j' && *(suffix+2) == 's')) {
 #ifdef DEBUG
-        fprintf(stderr, "URI not .js, pass\n");
+        fprintf(stderr, "URI not ends with .js\n");
 #endif
-        return;
+
+        if(strstr(http_get, ".js?") == NULL) {
+#ifdef DEBUG
+        fprintf(stderr, "URI not match .js at all, pass\n");
+#endif
+            return;
+        }
     }
 
     _host = strcasestr(payload+get_pos, "host:")+6;
     memcpy(http_host, _host, (strstr(_host, "\r\n") - _host));
 
 #ifdef DEBUG
-    fprintf(stderr, "URI: '%s' \n", http_get);
-    fprintf(stderr, "HOST: '%s' \n", http_host);
+    fprintf(stderr, "URI: '%s%s' \n", http_host, http_get);
 #endif
 
     inject(packet, http_get, http_host);
