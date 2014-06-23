@@ -57,7 +57,9 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
     get_pos = _get - payload;
     memcpy(http_get, payload+4, get_pos-13);
 
-    if(strstr(http_get, ".js") == NULL) {
+    size_t urllen = strlen(http_get);
+    char *suffix = http_get + urllen - 3;
+    if(!(*suffix == '.' && *(suffix+1) == 'j' && *(suffix+2) == 's')) {
 #ifdef DEBUG
         fprintf(stderr, "URI not .js, pass\n");
 #endif
