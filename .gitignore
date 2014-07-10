@@ -3,6 +3,7 @@
 *.ko
 *.obj
 *.elf
+hijack
 
 # Libraries
 *.lib
@@ -21,3 +22,11 @@
 *.i*86
 *.x86_64
 *.hex
+
+# vim
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+*.un~
+Session.vim
+.netrwhist
+*~
