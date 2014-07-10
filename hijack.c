@@ -24,7 +24,13 @@ pcap_t *init_pcap_handle(const char*);
 libnet_t *init_libnet_handle();
 int inject(const u_char*, const char*, const char*);
 
+pcap_t *handle;
 libnet_t *l;
+
+void sig_handler(int sig)
+{
+    pcap_breakloop(handle);
+}
 
 void
 get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packet)
@@ -122,14 +128,14 @@ int main(int argc, char* argv[]) {
 
     char* dev = argv[1];
 
+    signal(SIGINT, sig_handler);
+    signal(SIGQUIT, sig_handler);
+
     l = init_libnet_handle(); 
-    pcap_t *handle = init_pcap_handle(dev);
+    handle = init_pcap_handle(dev);
     pcap_loop (handle, -1, get_packet, NULL);
 
-#ifdef DEBUG
-    fprintf(stderr, "All done, cleaning up...\n");
-#endif
-
+    fprintf(stderr, "Exit, cleaning up...\n");
     pcap_close(handle);
     libnet_destroy(l);
 
