@@ -11,7 +11,6 @@
 #include <time.h>
 #include <math.h>
 #include <string.h>
-#include <bsd/string.h>
 #include <getopt.h>
 
 
@@ -109,7 +108,9 @@ get_packet(uint8_t *args, const struct pcap_pkthdr *header, const uint8_t *packe
     }
 
     /* Check contains ".js?" */
-    if(strnstr(payload+4, ".js?", _get - payload) == NULL) {
+    //if(strnstr(payload+4, ".js?", _get - payload) == NULL) {
+    if(memmem( payload+4, (_get-payload), 
+               ".js?", 4) == NULL) {
 #ifdef DEBUG
         fprintf(stderr, "URI not match .js at all, pass\n");
 #endif
